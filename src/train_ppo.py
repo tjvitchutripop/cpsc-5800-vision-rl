@@ -22,6 +22,7 @@ from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper, Flatten
 from utils import FlattenRGBDSegObservationWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
+from feature_extractor import NatureCNN, Theia, ResNet50, DenseNet121
 
 @dataclass
 class Args:
@@ -118,14 +119,16 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     # visual features
-    rgb : bool = True
+    rgb : bool = False
     """whether to exclude rgb channels in observations"""
     depth : bool = False
     """whether to include depth channel in observations"""
     segmentation : bool = False
     """whether to include segmentation channel in observations"""
-    include_state: bool = False
+    include_state: bool = True
     """whether to include state information in observations"""
+    feature_extractor: str = "nature_cnn"
+    """the type of feature extractor to use"""
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -182,103 +185,19 @@ class DictArray(object):
         new_buffer_shape = next(iter(new_dict.values())).shape[:len(shape)]
         return DictArray(new_buffer_shape, None, data_dict=new_dict)
 
-class NatureCNN(nn.Module):
-    def __init__(self, sample_obs):
-        super().__init__()
-
-        extractors = {}
-
-        self.out_features = 0
-        feature_size = 256
-        in_channels = 0
-        if "rgb" in sample_obs:
-            in_channels += sample_obs["rgb"].shape[-1]
-            image_size = (sample_obs["rgb"].shape[1], sample_obs["rgb"].shape[2])
-        if "depth" in sample_obs:
-            in_channels += sample_obs["depth"].shape[-1]
-            image_size = (sample_obs["depth"].shape[1], sample_obs["depth"].shape[2])
-        if "segmentation" in sample_obs:
-            in_channels += sample_obs["segmentation"].shape[-1]
-            image_size = (sample_obs["segmentation"].shape[1], sample_obs["segmentation"].shape[2])
-
-
-        # here we use a NatureCNN architecture to process images, but any architecture is permissble here
-        cnn = nn.Sequential(
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=32,
-                kernel_size=8,
-                stride=4,
-                padding=0,
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=0
-            ),
-            nn.ReLU(),
-            nn.Conv2d(
-                in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=0
-            ),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
-
-        # to easily figure out the dimensions after flattening, we pass a test tensor
-        with torch.no_grad():
-            # Build a sample image tensor combining available modalities (rgb/depth/segmentation)
-            image_tensors = []
-            if "rgb" in sample_obs:
-                rgb = sample_obs["rgb"].float().permute(0, 3, 1, 2).cpu() / 255.0
-                image_tensors.append(rgb)
-            if "depth" in sample_obs:
-                depth = sample_obs["depth"].float().permute(0, 3, 1, 2).cpu()
-                # If depth is not normalized, keep as float; CNN will learn scale
-                image_tensors.append(depth)
-            if "segmentation" in sample_obs:
-                seg = sample_obs["segmentation"].float().permute(0, 3, 1, 2).cpu()
-                image_tensors.append(seg)
-            assert len(image_tensors) > 0, "No image modalities found in observations"
-            sample_image = torch.cat(image_tensors, dim=1)
-            n_flatten = cnn(sample_image).shape[1]
-            fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
-        # Single image extractor that handles combined rgb+depth channels
-        extractors["image"] = nn.Sequential(cnn, fc)
-        self.out_features += feature_size
-
-        if "state" in sample_obs:
-            # for state data we simply pass it through a single linear layer
-            state_size = sample_obs["state"].shape[-1]
-            extractors["state"] = nn.Linear(state_size, 256)
-            self.out_features += 256
-
-        self.extractors = nn.ModuleDict(extractors)
-
-    def forward(self, observations) -> torch.Tensor:
-        encoded_tensor_list = []
-        # self.extractors contain nn.Modules that do all the processing.
-        for key, extractor in self.extractors.items():
-            if key == "image":
-                image_tensors = []
-                if "rgb" in observations:
-                    rgb = observations["rgb"].float().permute(0, 3, 1, 2) / 255.0
-                    image_tensors.append(rgb)
-                if "depth" in observations:
-                    depth = observations["depth"].float().permute(0, 3, 1, 2)
-                    image_tensors.append(depth)
-                if "segmentation" in observations:
-                    seg = observations["segmentation"].float().permute(0, 3, 1, 2)
-                    image_tensors.append(seg)
-                obs_img = torch.cat(image_tensors, dim=1)
-                encoded_tensor_list.append(extractor(obs_img))
-            else:
-                obs = observations[key]
-                encoded_tensor_list.append(extractor(obs))
-        return torch.cat(encoded_tensor_list, dim=1)
-
 class Agent(nn.Module):
-    def __init__(self, envs, sample_obs):
+    def __init__(self, envs, sample_obs, feature_extractor="nature_cnn"):
         super().__init__()
-        self.feature_net = NatureCNN(sample_obs=sample_obs)
+        if feature_extractor == "nature_cnn":
+            self.feature_net = NatureCNN(sample_obs=sample_obs)
+        elif feature_extractor == "theia":
+            self.feature_net = Theia(sample_obs=sample_obs)
+        elif feature_extractor == "resnet50":
+            self.feature_net = ResNet50(sample_obs=sample_obs)
+        elif feature_extractor == "densenet121":
+            self.feature_net = DenseNet121(sample_obs=sample_obs)
+        else:
+            raise ValueError(f"Unknown feature extractor type: {feature_extractor}")
         # latent_size = np.array(envs.unwrapped.single_observation_space.shape).prod()
         latent_size = self.feature_net.out_features
         self.critic = nn.Sequential(
@@ -419,7 +338,7 @@ if __name__ == "__main__":
     print(f"args.num_iterations={args.num_iterations} args.num_envs={args.num_envs} args.num_eval_envs={args.num_eval_envs}")
     print(f"args.minibatch_size={args.minibatch_size} args.batch_size={args.batch_size} args.update_epochs={args.update_epochs}")
     print(f"####")
-    agent = Agent(envs, sample_obs=next_obs).to(device)
+    agent = Agent(envs, sample_obs=next_obs, feature_extractor=args.feature_extractor).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     if args.checkpoint:

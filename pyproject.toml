@@ -5,7 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "einops>=0.8.1",
     "mani-skill @ git+https://github.com/haosulab/ManiSkill.git",
+    "omegaconf>=2.3.0",
     "tensorboard>=2.20.0",
+    "torchvision>=0.24.1",
+    "transformers>=4.57.3",
     "wandb>=0.23.1",
 ]
