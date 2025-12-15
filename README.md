@@ -1,6 +1,6 @@
 # What Visual Features Matter Most for Vision-Based Reinforcement Learning in Robotics?
 
-This is the code for my analysis of how different visual features (e.g., RGB, Segmentation, and Depth) and pretraining affect the training performance of RL policies in robotic manipulation tasks.  This was submitted as a course project for CPSC 5800: Introduction to Computer Vision at Yale University.
+This is the code for my analysis of how different visual features (e.g., RGB, segmentation, and depth) or visual pretraining affect RL policies in robotic manipulation tasks.  This was submitted as a course project for CPSC 5800: Introduction to Computer Vision at Yale University.
 
 ## Prerequisites
 
