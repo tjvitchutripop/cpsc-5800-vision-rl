@@ -49,7 +49,7 @@ def extract_zip(zip_path: str, extract_to: str) -> None:
 
 
 def main():
-    url_or_id = "https://drive.google.com/file/d/1le0pnWjZoz0F0ocvD2Db8jugKI92-c5X/view?usp=sharing"
+    url_or_id = "https://drive.google.com/file/d/15DQw8bk2-QuVV0HXOF5qdryYnrTBEU9Q/view?usp=sharing"
     
     # Extract file ID
     try:

@@ -196,7 +196,7 @@ class Agent(nn.Module):
             self.feature_net = ResNet50(sample_obs=sample_obs)
         elif feature_extractor == "densenet121":
             self.feature_net = DenseNet121(sample_obs=sample_obs)
-        elif feature_extractor == "efficientnet_b0":
+        elif feature_extractor == "efficientnetb0":
             self.feature_net = EfficientNetB0(sample_obs=sample_obs)
         else:
             raise ValueError(f"Unknown feature extractor type: {feature_extractor}")

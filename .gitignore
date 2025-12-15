@@ -13,3 +13,4 @@ wheels/
 runs/
 wandb/
 models/
+eval_videos/

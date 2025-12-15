@@ -18,21 +18,16 @@ from utils import FlattenRGBDSegObservationWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from feature_extractor import NatureCNN, Theia, ResNet50, DenseNet121, EfficientNetB0
 from train_ppo import Agent
+from custom_env import VisualVariationPickCube
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate a trained PPO model")
     parser.add_argument(
-        "--model-path",
-        type=str,
-        required=True,
-        help="Path to the model checkpoint (e.g., models/pickCube/pickCube_rgb.pt)"
-    )
-    parser.add_argument(
         "--task",
         type=str,
-        default="PickCube-v1",
-        choices=["PickCube-v1", "PushCube-v1", "PushT-v1"],
+        default="pickCube",
+        choices=["pickCube", "pushCube", "pushT"],
         help="Task environment to evaluate on"
     )
     parser.add_argument(
@@ -60,7 +55,7 @@ def parse_args():
         "--feature-extractor",
         type=str,
         default="nature_cnn",
-        choices=["nature_cnn", "theia", "resnet50", "densenet121", "efficientnet_b0"],
+        choices=["nature_cnn", "theia", "resnet50", "densenet121", "efficientnetb0"],
         help="Feature extractor architecture"
     )
     parser.add_argument(
@@ -109,12 +104,35 @@ def parse_args():
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device to run on"
     )
+    parser.add_argument(
+        "--set_cube_color",
+        type=str,
+        help="Set cube color in RGBA format, e.g., '[1.0,0.0,0.0,1.0]' for red"
+    )
     
     return parser.parse_args()
 
 
 def evaluate_model(args):
     """Main evaluation function"""
+
+    # Construct model path
+    if args.feature_extractor == "nature_cnn":
+        model_dir = f"models/{args.task}/"
+        model_filename = f"{args.task}"
+        if args.rgb:
+            model_filename += "_rgb"
+        if args.segmentation:
+            model_filename += "_seg"
+        if args.depth:
+            model_filename += "_depth"
+        model_filename += ".pt"
+    else:
+        model_dir = f"models/{args.task}/pretrained_features/"
+        model_filename = f"{args.task}_{args.feature_extractor}.pt"
+    args.model_path = os.path.join(model_dir, model_filename)
+
+    
     
     print("=" * 60)
     print(f"Evaluating model: {args.model_path}")
@@ -138,7 +156,18 @@ def evaluate_model(args):
         sim_backend="physx_cuda"
     )
     
-    env = gym.make(args.task, num_envs=1, **env_kwargs)
+    if args.task == "pickCube":
+        task = "PickCube-v1"
+    elif args.task == "pushCube":
+        task = "PushCube-v1"
+    elif args.task == "pushT":
+        task = "PushT-v1"
+    if args.set_cube_color and args.task == "pickCube":
+        print("Using custom environment with custom cube colors")
+        cube_color = eval(args.set_cube_color)
+        env = VisualVariationPickCube(num_envs=1, cube_color=cube_color, **env_kwargs)
+    else:
+        env = gym.make(task, num_envs=1, **env_kwargs)
     
     # Wrap environment with observation wrapper
     env = FlattenRGBDSegObservationWrapper(
@@ -218,17 +247,16 @@ def evaluate_model(args):
         episode_lengths.append(episode_length)
         
         print(f"Episode {episode + 1}/{args.num_episodes}: "
-              f"Reward = {episode_reward:.3f}, Length = {episode_length}")
+              f"Reward = {episode_reward:.3f}, Length = {episode_length}, Success = {'Yes' if done and info.get('success', False) else 'No'}")
     
     # Print summary statistics
     print("-" * 60)
     print("\nEvaluation Summary:")
+    print(f"  Success Rate: {success_count}/{args.num_episodes} ({100*success_count/args.num_episodes:.1f}%)")
     print(f"  Mean Reward: {np.mean(episode_rewards):.3f} ± {np.std(episode_rewards):.3f}")
     print(f"  Mean Length: {np.mean(episode_lengths):.1f} ± {np.std(episode_lengths):.1f}")
     print(f"  Min Reward: {np.min(episode_rewards):.3f}")
     print(f"  Max Reward: {np.max(episode_rewards):.3f}")
-    if success_count > 0:
-        print(f"  Success Rate: {success_count}/{args.num_episodes} ({100*success_count/args.num_episodes:.1f}%)")
     print("=" * 60)
     
     env.close()

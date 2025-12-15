@@ -3,18 +3,8 @@ import gymnasium as gym
 from utils import FlattenRGBDSegObservationWrapper
 
 env = gym.make("PushCube-v1", obs_mode="rgb+depth+segmentation")
-# env = FlattenRGBDSegObservationWrapper(
-#     env,
-#     rgb=True,
-#     depth=True,
-#     segmentation=True,
-#     state=True,
-# )
+
 obs = env.reset()
-# print(obs[0].keys())
-# print("State", obs[0]["state"].shape, obs[0]["state"])
-# # print("Observation", obs[0]["sensor_data"]["base_camera"].keys())
-# print("Observation keys:", obs[0].keys())
 
 # Visualize rgb depth and segmentation
 import matplotlib.pyplot as plt
