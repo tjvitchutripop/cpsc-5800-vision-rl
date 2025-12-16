@@ -40,6 +40,7 @@ UV will automatically create a virtual environment and install all dependencies 
 
 ```bash
 uv venv
+source .venv/bin/activate
 uv sync
 ```
 
