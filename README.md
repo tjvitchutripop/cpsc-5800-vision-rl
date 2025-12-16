@@ -39,6 +39,7 @@ cd cpsc-5800-vision-rl
 UV will automatically create a virtual environment and install all dependencies from `pyproject.toml`:
 
 ```bash
+uv venv
 uv sync
 ```
 
